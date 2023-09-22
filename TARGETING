@@ -1,0 +1,186 @@
+-- 1. 캠페인 대상 mid 입력 쿼리
+-- notice 테이블에 mid 입력하기
+DELETE FROM crm_db.crm_notice_target_info 
+WHERE start_date = '2022-08-02';
+
+COPY crm_db.crm_notice_target_info 
+FROM LOCAL 'c:/notice_0802.csv' 
+DELIMITER ',' 
+ENCLOSED BY '"' 
+SKIP 1;
+
+-- target 테이블에 mid 입력하기
+DELETE FROM crm_db.crm_cmpn_target 
+WHERE start_date = '2022-08-02';
+
+COPY crm_db.crm_cmpn_target 
+FROM LOCAL 'c:/cont_0802.csv' 
+DELIMITER ',' 
+ENCLOSED BY '"' 
+SKIP 1;
+
+-- 2. 알림 세팅용 캠페인 mid 추출 쿼리
+-- crm target 테이블에서 MID 추출하기
+SELECT
+    a.start_date AS CURDATE,
+    a.m_id AS m_id,
+    DECODE(a.benefit_type = 'coupon', 1, b.sale_coupon_info_no, 0) AS deal_id,
+    1015 AS cmpn_no,
+    a.crm_id AS cmpn_seq,
+    a.crm_no AS test_group,
+    CASE 
+        WHEN a.min_value > 0 AND a.benefit_type LIKE '%coupon%' THEN 1
+        WHEN a.min_value = 0 AND a.benefit_type LIKE '%point%' THEN 2
+        ELSE 99 
+    END AS spare,
+    sysdate()
+FROM crm_db.crm_cmpn_target a
+INNER JOIN crm_db.crm_notice_target_info b 
+    ON a.m_id = b.m_id AND a.start_date = b.start_date AND a.crm_id = b.crm_id AND a.crm_no = b.crm_no
+WHERE 
+    a.start_date = CURRENT_DATE AND a.cont_group = 1
+ORDER BY 1, 4, 5, 2;
+
+-- crm target 테이블에 입력된 MID 수 조회하기
+SELECT
+    a.start_date AS CURDATE,
+    COUNT(DISTINCT a.m_id) AS m_id,
+    DECODE(a.benefit_type = 'coupon', 1, b.sale_coupon_info_no, 0) AS deal_id,
+    1015 AS cmpn_no,
+    a.crm_id AS cmpn_seq,
+    a.crm_no AS test_group,
+    a.cont_group,
+    CASE 
+        WHEN a.min_value > 0 AND a.benefit_type LIKE '%coupon%' THEN 1
+        WHEN a.min_value = 0 AND a.benefit_type LIKE '%point%' THEN 2
+        ELSE 99 
+    END AS spare,
+    sysdate()
+FROM crm_db.crm_cmpn_target a
+LEFT JOIN crm_db.cust_app_push c 
+    ON a.m_id = c.m_id
+INNER JOIN crm_db.crm_notice_target_info b 
+    ON a.m_id = b.m_id AND a.start_date = b.start_date AND a.crm_id = b.crm_id AND a.crm_no = b.crm_no
+WHERE 
+    a.start_date = CURRENT_DATE
+GROUP BY 1, 3, 4, 5, 6, 7, 8, 9
+ORDER BY 4, 5, 6;
+
+-- 3. 알림 수신자 mid 추출 쿼리
+-- 푸시 알림 수신 대상 MID 추출하기
+SELECT 
+    a.start_date AS CURDATE,
+    a.m_id AS m_id,
+    DECODE(a.benefit_type = 'coupon', 1, b.sale_coupon_info_no, 0) AS deal_id,
+    1015 AS cmpn_no,
+    a.crm_id AS cmpn_seq,
+    a.crm_no AS test_group,
+    a.cont_group,
+    CASE 
+        WHEN a.min_value > 0 AND a.benefit_type LIKE '%coupon%' THEN 1
+        WHEN a.min_value = 0 AND a.benefit_type LIKE '%point%' THEN 2
+        ELSE 99 
+    END AS spare,
+    sysdate()
+FROM crm_db.crm_cmpn_target a
+INNER JOIN crm_db.crm_notice_target_info b 
+    ON a.m_id = b.m_id AND a.start_date = b.start_date AND a.crm_id = b.crm_id AND a.crm_no = b.crm_no
+LEFT JOIN crm_db.cust_app_push c 
+    ON a.m_id = c.m_id
+WHERE 
+    a.start_date = CURRENT_DATE AND c.push_accept_yn = 'Y'
+ORDER BY 1, 4, 5, 2;
+
+-- 4. 캠페인별 결과 데이터 추출
+-- 캠페인 결과 데이터를 위한 MID 추출하기
+SELECT 
+    a.start_date AS CURDATE,
+    a.m_id AS m_id,
+    a.benefit_type,
+    a.min_value,
+    b.point_amt,
+    b.use_start_date,
+    b.use_end_date,
+    b.sale_coupon_info_no
+FROM crm_db.crm_cmpn_target a
+LEFT JOIN crm_db.crm_notice_target_info b 
+    ON a.m_id = b.m_id AND a.start_date = b.start_date AND a.crm_id = b.crm_id AND a.crm_no = b.crm_no
+WHERE 
+    a.start_date = CURRENT_DATE AND a.cont_group = 1
+ORDER BY 1, 2;
+
+-- 5. 수신된 알림의 결과 데이터 추출
+-- 수신된 알림에 대한 사용자의 반응 데이터를 추출하기
+SELECT 
+    a.start_date AS CURDATE,
+    a.m_id AS m_id,
+    a.benefit_type,
+    a.min_value,
+    b.point_amt,
+    b.use_start_date,
+    b.use_end_date,
+    b.sale_coupon_info_no
+FROM crm_db.crm_cmpn_target a
+LEFT JOIN crm_db.crm_notice_target_info b 
+    ON a.m_id = b.m_id AND a.start_date = b.start_date AND a.crm_id = b.crm_id AND a.crm_no = b.crm_no
+WHERE 
+    a.start_date = CURRENT_DATE AND a.cont_group = 2
+ORDER BY 1, 2;
+
+-- 6. 특정 조건을 만족하는 사용자 추출
+-- 특정 조건(예: 특별한 이벤트 참여)을 만족하는 사용자의 MID 추출하기
+SELECT 
+    a.start_date AS CURDATE,
+    a.m_id AS m_id,
+    a.benefit_type,
+    a.min_value,
+    b.point_amt,
+    b.use_start_date,
+    b.use_end_date,
+    b.sale_coupon_info_no
+FROM crm_db.crm_cmpn_target a
+LEFT JOIN crm_db.crm_notice_target_info b 
+    ON a.m_id = b.m_id AND a.start_date = b.start_date AND a.crm_id = b.crm_id AND a.crm_no = b.crm_no
+WHERE 
+    a.start_date = CURRENT_DATE AND a.cont_group = 3
+ORDER BY 1, 2;
+
+-- 7. 사용자 행동 데이터에 따른 사용자 추출
+-- 사용자의 특정 행동(예: 구매, 방문) 데이터를 기반으로 사용자 추출하기
+SELECT 
+    a.start_date AS CURDATE,
+    a.m_id AS m_id,
+    a.benefit_type,
+    a.min_value,
+    b.point_amt,
+    b.use_start_date,
+    b.use_end_date,
+    b.sale_coupon_info_no
+FROM crm_db.crm_cmpn_target a
+LEFT JOIN crm_db.crm_notice_target_info b 
+    ON a.m_id = b.m_id AND a.start_date = b.start_date AND a.crm_id = b.crm_id AND a.crm_no = b.crm_no
+WHERE 
+    a.start_date = CURRENT_DATE AND a.cont_group = 4
+ORDER BY 1, 2;
+
+-- 8. 특정 기간 동안 활동이 없는 사용자 추출
+-- 특정 기간(예: 3개월) 동안 활동이 없는 사용자의 MID 추출하기
+SELECT 
+    a.start_date AS CURDATE,
+    a.m_id AS m_id,
+    a.benefit_type,
+    a.min_value,
+    b.point_amt,
+    b.use_start_date,
+    b.use_end_date,
+    b.sale_coupon_info_no
+FROM crm_db.crm_cmpn_target a
+LEFT JOIN crm_db.crm_notice_target_info b 
+    ON a.m_id = b.m_id AND a.start_date = b.start_date AND a.crm_id = b.crm_id AND a.crm_no = b.crm_no
+WHERE 
+    a.start_date = CURRENT_DATE AND a.cont_group = 5
+ORDER BY 1, 2;
+
+
+
+
